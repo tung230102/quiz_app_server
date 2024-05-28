@@ -4,21 +4,27 @@ const slugify = require("slugify");
 const questionSchema = new mongoose.Schema(
   {
     title: {
-      type: "string",
+      type: String,
       required: [true, "A question have a title"],
       unique: true,
       trim: true,
-      maxlength: [
-        40,
-        "A question title must have less or equal then 40 characters",
-      ],
       minlength: [
         10,
         "A question title must have more or equal then 10 characters",
       ],
     },
     slug: String,
-
+    category: {
+      type: String,
+      required: [true, "A question have a category"],
+      default: "other",
+    },
+    difficulty: {
+      type: String,
+      enum: ["easy", "medium", "hard"],
+      required: [true, "A question have a difficulty"],
+      default: "easy",
+    },
     thumbnail_link: String,
     createdAt: {
       type: Date,

@@ -22,7 +22,6 @@ exports.uploadThumbnail = catchAsync(async (req, res, next) => {
   });
 });
 
-// exports.getQuestion = factory.getOne(Question, { path: "answers" });
 exports.getAllQuestions = factory.getAll(Question);
 exports.getQuestion = factory.getOne(Question);
 exports.createQuestion = factory.createOne(Question);
@@ -31,26 +30,44 @@ exports.deleteQuestion = factory.deleteOne(Question);
 
 exports.getQuestionsPlay = catchAsync(async (req, res) => {
   const totalQuestions = req.query.total * 1;
+  const category = req.query.category;
+  const difficulty = req.query.difficulty;
+
+  const matchCriteria = {};
+  if (category) matchCriteria.category = category;
+  if (difficulty) matchCriteria.difficulty = difficulty;
 
   const randomQuestions = await Question.aggregate([
+    { $match: matchCriteria },
     { $sample: { size: totalQuestions } },
   ]);
 
-  // Map through the randomQuestions and populate answers for each question
-  const populatedQuestions = await Promise.all(
+  const doc = await Promise.all(
     randomQuestions.map(async (question) => {
       const populatedQuestion = await Question.populate(question, {
         path: "answers",
+        select: "_id content",
       });
-      return populatedQuestion;
+      return {
+        category,
+        difficulty,
+        id: populatedQuestion._id,
+        title: populatedQuestion.title,
+        thumbnail_link: populatedQuestion.thumbnail_link,
+        answers: populatedQuestion.answers.map((answer) => ({
+          id: answer._id,
+          content: answer.content,
+        })),
+      };
     })
   );
 
   res.status(200).json({
     status: "success",
     statusCode: 200,
+    results: doc.length,
     data: {
-      data: populatedQuestions,
+      data: doc,
     },
   });
 });
@@ -63,6 +80,8 @@ exports.submitQuestions = catchAsync(async (req, res, next) => {
   }).populate("answers");
 
   let totalScore = 0;
+  let maxScore = 10;
+
   const listQuestionChecked = questions.map((question) => {
     const submittedQuestion = listQuestionSubmitted.find(
       (submitted) => submitted.id === question.id
@@ -80,35 +99,18 @@ exports.submitQuestions = catchAsync(async (req, res, next) => {
       };
     });
 
-    const numberSubmitCorrect = answers.filter(
-      (answer) => answer.is_submit_correct
-    ).length;
-    const numberSubmitIncorrect = answers.filter(
-      (answer) => !answer.is_submit_correct
-    ).length;
-    const numberAnswersCorrect = question.answers.filter(
-      (answer) => answer.is_correct
-    ).length;
+    const isAllCorrect = answers.every(
+      (answer) => answer.is_correct === answer.is_submit_correct
+    );
 
-    let scoreThisQuestion = 0;
-
-    if (
-      numberSubmitCorrect === numberAnswersCorrect
-      // && numberSubmitIncorrect === 0
-    ) {
-      scoreThisQuestion = 10 / questions.length;
-      totalScore += scoreThisQuestion;
-    }
+    const scoreThisQuestion = isAllCorrect ? maxScore / questions.length : 0;
+    totalScore += scoreThisQuestion;
 
     return {
       id: question.id,
       title: question.title,
       thumbnail_link: question.thumbnail_link,
       answers,
-      numberSubmitCorrect,
-      numberSubmitIncorrect,
-      numberAnswersCorrect,
-      scoreThisQuestion,
     };
   });
 
